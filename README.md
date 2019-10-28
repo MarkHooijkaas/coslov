@@ -1,6 +1,6 @@
 # coslov: Configfile and Output Stream Line Oriented Verification
 
-This pag has just been started
+This page has just been started
 
 ## Syntax
 ```
@@ -13,8 +13,8 @@ Special characters & and  > in regexep @<'&amp; and &gt;'>
 
 @optional: line may be missing
 
-@begin unor
-  @begin
+@begin unordered
+  @begin repeat
   indenting is optional, will be removed
   @end
 @end
