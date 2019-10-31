@@ -49,7 +49,10 @@ All commands can be abbreviated with the first letter or letters, for example to
             if context.args.debug:
                 template.show()
             context.debug("###############")
-            return template.match(context)
+            template.match(context)
+            if len(context.missing_items)>0:
+                print(len(context.missing_items), " missing items")
+                sys.exit(1)
         else:
             raise SystemExit(
                 "Unknown command '%s', must be any of %s or a beginning of those letters, e.g enc for encrypt\n" %
@@ -73,7 +76,9 @@ class CoslovContext():
         self.extra_lines = []
 
     def missing(self, item, count):
-        self.verbose("MISSING: "+str(item))
+        self.warning("expected min=" + str(item.min) + ": " + str(item))
+        #context.warning(str(context.line_index)+": "+context.line())
+        #context.warning("expecting: " + str(self))
         self.missing_items.append(item)
 
     def extra(self, line=None):
@@ -272,9 +277,7 @@ class Block(Item):
             context.debug(str(item.max) + '*' + str(item) )
             cnt=self.count_matches(item, context)
             if cnt < item.min:
-                context.warning("expected min=" + str(item.min) + ": " + str(item))
-                #context.warning(str(context.line_index)+": "+context.line())
-                #context.warning("expecting: " + str(self))
+                context.missing(item, cnt)
                 ok = False
                 context.nextline()
             else:
