@@ -5,6 +5,56 @@ import os
 import re
 import sys
 
+#####################################################################################
+class CoslovCli:
+    def __init__(self):
+        epilogtext = '''
+commands:
+- coslov check:   check one or more files according to a template
+
+All commands can be abbreviated with the first letter or letters, for example to check:
+- coslov c
+- coslov ch
+- coslov che
+- coslov chec
+'''
+
+        self.allcommands = "check"
+        self.parser = argparse.ArgumentParser(
+            description='Configfile and Output Stream Line Oriented Validator',
+            epilog=epilogtext,
+            formatter_class=argparse.RawTextHelpFormatter)
+        self.parser.add_argument('-q', '--quiet', action='store_true', help='show no informational output')
+        self.parser.add_argument('-d', '--debug', action='store_true', help='print debug info')
+        self.parser.add_argument('command', help=self.allcommands)
+        self.parser.add_argument('template', nargs='?', default='template.coslov', help='template file')
+        self.parser.add_argument('filename', nargs='?', default=None, help='file to check')
+        self.args = self.parser.parse_args()
+        self.context = Context(self.args)
+
+    def command(self, name):
+        if len(name) < len(self.args.command):
+            return False
+        return name.startswith(self.args.command)
+
+
+    def run(self):
+        args = self.args
+        context = self.context
+        if self.command('check'):
+            lines = open(args.template).readlines()
+            template = Block(lines)
+            if args.debug:
+                template.show()
+            context.debug("###############")
+            state = State(args, open(args.filename).readlines())
+            return template.match(state)
+        else:
+            raise SystemExit(
+                "Unknown command '%s', must be any of %s or a beginning of those letters, e.g enc for encrypt\n" %
+                (self.args.command, self.allcommands)
+            )
+
 ############################################################
 def parse_key(str):
     return re.match("^[^:]*", str).group().strip()
@@ -212,59 +262,6 @@ class Block(Item):
         return ok
 
 ############################################################
-
-
-
-#####################################################################################
-class CoslovCli:
-    def __init__(self):
-        epilogtext = '''
-commands:
-- coslov check:   check one or more files according to a template
-
-All commands can be abbreviated with the first letter or letters, for example to check:
-- coslov c
-- coslov ch
-- coslov che
-- coslov chec
-'''
-
-        self.allcommands = "check"
-        self.parser = argparse.ArgumentParser(
-            description='Configfile and Output Stream Line Oriented Validator',
-            epilog=epilogtext,
-            formatter_class=argparse.RawTextHelpFormatter)
-        self.parser.add_argument('-q', '--quiet', action='store_true', help='show no informational output')
-        self.parser.add_argument('-d', '--debug', action='store_true', help='print debug info')
-        self.parser.add_argument('command', help=self.allcommands)
-        self.parser.add_argument('template', nargs='?', default='template.coslov', help='template file')
-        self.parser.add_argument('filename', nargs='?', default=None, help='file to check')
-        self.args = self.parser.parse_args()
-        self.context = Context(self.args)
-
-    def command(self, name):
-        if len(name) < len(self.args.command):
-            return False
-        return name.startswith(self.args.command)
-
-
-    def run(self):
-        args = self.args
-        context = self.context
-        if self.command('check'):
-            lines = open(args.template).readlines()
-            template = Block(lines)
-            if args.debug:
-                template.show()
-            context.debug("###############")
-            state = State(args, open(args.filename).readlines())
-            return template.match(state)
-        else:
-            raise SystemExit(
-                "Unknown command '%s', must be any of %s or a beginning of those letters, e.g enc for encrypt\n" %
-                (self.args.command, self.allcommands)
-            )
-
 
 if __name__ == '__main__':
     CoslovCli().run()
