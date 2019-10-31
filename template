@@ -1,8 +1,0 @@
-line 1
-line 2
-@?:- hoi
-line some @<time>
-@*:try number @<int> out of max @<int> tries
-and with a @<'[#]*'> and @<int> regexp
-and more lines 1
-and more lines 2
