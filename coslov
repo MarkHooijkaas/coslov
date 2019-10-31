@@ -155,6 +155,9 @@ class Line(Item):
     def match(self, context):
         return self.line == context.line()
 
+    def __str__(self):
+        return self.line
+
     def __repr__(self):
         return "Line(" + self.line + ")"
 
@@ -174,6 +177,7 @@ _RE_FIND_REGEXPS=re.compile('@<[^>]*>')
 class RegexpLine(Line):
     def __init__(self, origline):
         Line.__init__(self, origline)
+        self.origline=origline
         prev = 0
         result = ''
         for match in _RE_FIND_REGEXPS.finditer(self.line):
@@ -190,6 +194,9 @@ class RegexpLine(Line):
         result += self.line[prev:]
         self.matcher=re.compile(result)
 
+    def __str__(self):
+        return self.origline
+
     def __repr__(self):
         return "RegexpLine(" + self.matcher.pattern + ")*"+str(self.max)
 
@@ -202,6 +209,9 @@ class YamlVar(Item):
     def __init__(self, line):
         Item.__init__(self, parse_key(line[:5]))
         self.var = parse_remainder(line).strip()
+
+    def __str__(self):
+        return self.var+": ..."
 
     def __repr__(self):
         return "YamlVar(" +self.var + ")"
