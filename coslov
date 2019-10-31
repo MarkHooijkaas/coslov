@@ -25,6 +25,7 @@ All commands can be abbreviated with the first letter or letters, for example to
             epilog=epilogtext,
             formatter_class=argparse.RawTextHelpFormatter)
         self.parser.add_argument('-q', '--quiet',  action='store_true', help='show no informational output')
+        self.parser.add_argument('-v', '--verbose',  action='store_true', help='print verbose info')
         self.parser.add_argument('-d', '--debug',  action='store_true', help='print debug info')
         self.parser.add_argument('-s', '--strict', action='store_true', help='ignore the ignores')
         self.parser.add_argument('-p', '--peek',  help='peek PEEK lines ahead')
@@ -81,12 +82,20 @@ class CoslovContext():
         self.extra_lines.appen(line)
 
     def warning(self, str):
+        if self.args.quiet:
+            return
+        print(str)
+
+    def info(self, str):
+        if self.args.quiet:
+            return
         print(str)
 
     def verbose(self, str):
         if self.args.quiet:
             return
-        print(str)
+        if self.args.verbose or self.args.debug:
+           print(str)
 
     def debug(self, str):
         if self.args.quiet:
