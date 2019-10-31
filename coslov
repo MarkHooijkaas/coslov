@@ -1,7 +1,9 @@
 #!/usr/bin/python
 
+from copy import copy
 import os
 import re
+import sys
 
 ############################################################
 def parse_key(str):
@@ -11,6 +13,24 @@ def parse_remainder(str):
     return re.sub("^[^:]*:", "", str).strip()
 
 ############################################################
+
+class State:
+    def __init__(self, lines, line_index=0, item_index=0):
+        self.lines = lines
+        self.line_index = line_index
+        self.item_index = item_index
+        self.ok = True
+        self.count = 0
+        self.match_count = 0
+    def line(self):
+        return self.lines[self.line_index].rstrip()
+    def nextline(self):
+        self.line_index += 1
+    def prevline(self):
+        self.line_index -= 1
+
+
+##########################################################################
 
 class Item:
     def __init__(self, options):
@@ -26,7 +46,11 @@ class Item:
         else:
             self.min=1
             self.max=1
+    def show(self, indent):
+        print(indent+repr(self))
 
+
+############################################################
 
 class Line(Item):
     def __init__(self, line):
@@ -41,11 +65,23 @@ class Line(Item):
         Item.__init__(self, opt)
         self.line=line.rstrip()
 
-    def match(self, line):
+    def match(self, state):
+        line = state.line()
+        if self._match(line):
+            state.nextline()
+            return True
+        else:
+            print(str(state.line_index)+": "+state.line())
+            print("expecting: " + str(self))
+            return False
+
+    def _match(self, line):
         return self.line == line
 
     def __repr__(self):
         return "Line(" + self.line + ")"
+
+############################################################
 
 standard_regexps = {
     'time': '[0-2][0-9]:[0-5][0-9]:[0-5][0-9]',
@@ -78,53 +114,102 @@ class RegexpLine(Line):
     def __repr__(self):
         return "RegexpLine(" + self.matcher.pattern + ")"
 
-    def match(self, line):
+    def _match(self, line):
         return self.matcher.match(line)
+
+##########################################################################
+
+class YamlVar(Item):
+    def __init__(self, line):
+        Item.__init__(self, '')
+        self.var = parse_remainder(line).strip()
+
+    def __repr__(self):
+        return "YamlVar(" +self.var + ")"
+
+    def match(self, state):
+        line = state.line()
+        if line.startswith(self.var+":"):
+            state.nextline()
+            if line.endswith('|'):
+                line=state.line()
+                indent=' ' * (len(line) - len(line.lstrip()))
+                while (line.startswith(indent)):
+                    state.nextline()
+                    line=state.line()
+                state.prevline()
+            return True
+        else:
+            print(str(state.line_index)+": "+state.line())
+            print("expecting: " + str(self))
+            return False
+
+##########################################################################
 
 
 class Block(Item):
-    def __init__(self,lines):
+    def __init__(self, lines, index=0):
         Item.__init__(self, '')  # TODO: parse @block
         self.items = []
-        for line in lines:
-            if '@<' in line:
+        line = ''
+        while index < len(lines) and not line.startswith('@end'):
+            line = lines[index].rstrip()
+            if line.startswith('@block'):
+                block = Block(lines, index+1)
+                self.items.append(block)
+                index += len(block.items)+2
+            elif line.startswith('@yaml:'):
+                self.items.append(YamlVar(line))
+            elif '@<' in line:
                 self.items.append(RegexpLine(line))
             else:
                 self.items.append(Line(line))
+            index += 1
 
-    def show(self):
+    def show(self, indent=''):
         for i in self.items:
-            print i
+            i.show(indent+'    ')
 
-    def match_line(self, line, item_index, match_count, ok):
-        item = self.items[item_index]
-        #print("expecting: " + str(item))
-        if item.match(line):
-            print("    match: " + line)
-            match_count += 1
-            if match_count >= item.max:
-                item_index += 1  # next template item
-                match_count = 0
-        elif match_count > 0:  # previous line already matched this item, so maybe the next item is in order
+    def match_line(self, state):
+        item = self.items[state.item_index]
+        line = ''
+        if item.match(state):
+            #line_index += linecount
+            print("    match: " + state.line())
+            state.match_count += 1
+            if state.match_count >= item.max:
+                state.item_index += 1  # next template item
+                state.match_count = 0
+        elif state.match_count > 0:  # previous line already matched this item, so maybe the next item is in order
             print "bump!"
-            item_index, match_count, ok = self.match_line(line, item_index+1, 0, ok)
+            state.match_count = 0
+            state.item_index += 1
+            self.match_line(state)
         else:  # did not match anything
             print("unexpected: " + line)
-            ok = False
-        return (item_index, match_count, ok)
+            return False
+        return True
 
+    def match(self, parent_state):
+        state = State(
+            parent_state.lines,
+            line_index = parent_state.line_index,
+            item_index = parent_state.item_index
+        )
+        print "Entering "+str(state)
+        while state.line_index < len(lines):
+            print self.items[state.item_index]
+            if not self.match_line(state):
+                return  False
+        return True
 
-    def match(self, lines):
-        item_index = 0
-        match_count = 0
-        ok = True
-        for line in lines:
-            line = line.rstrip()
-            item_index, match_count, ok = self.match_line(line, item_index, match_count, ok)
-        return ok
+############################################################
 
 
 if __name__ == '__main__':
-    template = Block(open("template"))
-    print template
-    template.match(open('test'))
+    lines = open(sys.argv[1]).readlines()
+    template = Block(lines)
+    template.show()
+    print "###############"
+    state = State(open(sys.argv[2]).readlines())
+    template.match(state)
