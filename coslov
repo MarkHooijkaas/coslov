@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import os
 import re
 
 ############################################################
@@ -40,7 +41,7 @@ class Line(Item):
         Item.__init__(self, opt)
         self.line=line.rstrip()
 
-    def match(line):
+    def match(self, line):
         return self.line == line
 
     def __repr__(self):
@@ -72,10 +73,13 @@ class RegexpLine(Line):
                 result += standard_regexps[key]
 
         result += self.line[prev:]
-        self.matcher=result
+        self.matcher=re.compile(result)
 
     def __repr__(self):
-        return "RegexpLine(" + self.matcher + ")"
+        return "RegexpLine(" + self.matcher.pattern + ")"
+
+    def match(self, line):
+        return self.matcher.match(line)
 
 
 class Block(Item):
@@ -93,6 +97,34 @@ class Block(Item):
             print i
 
 
+    def match(self, lines):
+        item_index = 0
+        match_count = 0
+        ok = True
+        for line in lines:
+            line = line.rstrip()
+            item = self.items[item_index]
+            print("expecting: " + str(item))
+            if item.match(line):
+                print("    match: " + line)
+                match_count += 1
+                if match_count >= item.max:
+                    item_index += 1  # next template item
+                    match_count = 0
+            elif match_count > 0:  # previous line already matched this item, so maybe the next item is in order
+                item_index += 1  # TODO: should be smarter
+                match_count = 0
+            else:  # did not match anything
+                print("unexpected: " + line)
+                ok = False
+        return ok
+
+
+
+
+
+
 if __name__ == '__main__':
     template = Block(open("template"))
-    template.show()
+    print template
+    template.match(open('test'))
