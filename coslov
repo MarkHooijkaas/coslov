@@ -96,6 +96,23 @@ class Block(Item):
         for i in self.items:
             print i
 
+    def match_line(self, line, item_index, match_count, ok):
+        item = self.items[item_index]
+        #print("expecting: " + str(item))
+        if item.match(line):
+            print("    match: " + line)
+            match_count += 1
+            if match_count >= item.max:
+                item_index += 1  # next template item
+                match_count = 0
+        elif match_count > 0:  # previous line already matched this item, so maybe the next item is in order
+            print "bump!"
+            item_index, match_count, ok = self.match_line(line, item_index+1, 0, ok)
+        else:  # did not match anything
+            print("unexpected: " + line)
+            ok = False
+        return (item_index, match_count, ok)
+
 
     def match(self, lines):
         item_index = 0
@@ -103,25 +120,8 @@ class Block(Item):
         ok = True
         for line in lines:
             line = line.rstrip()
-            item = self.items[item_index]
-            print("expecting: " + str(item))
-            if item.match(line):
-                print("    match: " + line)
-                match_count += 1
-                if match_count >= item.max:
-                    item_index += 1  # next template item
-                    match_count = 0
-            elif match_count > 0:  # previous line already matched this item, so maybe the next item is in order
-                item_index += 1  # TODO: should be smarter
-                match_count = 0
-            else:  # did not match anything
-                print("unexpected: " + line)
-                ok = False
+            item_index, match_count, ok = self.match_line(line, item_index, match_count, ok)
         return ok
-
-
-
-
 
 
 if __name__ == '__main__':
