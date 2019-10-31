@@ -24,13 +24,15 @@ All commands can be abbreviated with the first letter or letters, for example to
             description='Configfile and Output Stream Line Oriented Validator',
             epilog=epilogtext,
             formatter_class=argparse.RawTextHelpFormatter)
-        self.parser.add_argument('-q', '--quiet', action='store_true', help='show no informational output')
-        self.parser.add_argument('-d', '--debug', action='store_true', help='print debug info')
+        self.parser.add_argument('-q', '--quiet',  action='store_true', help='show no informational output')
+        self.parser.add_argument('-d', '--debug',  action='store_true', help='print debug info')
+        self.parser.add_argument('-s', '--strict', action='store_true', help='ignore the ignores')
+        self.parser.add_argument('-p', '--peek',  help='peek PEEK lines ahead')
         self.parser.add_argument('command', help=self.allcommands)
         self.parser.add_argument('template', nargs='?', default='template.coslov', help='template file')
         self.parser.add_argument('filename', nargs='?', default=None, help='file to check')
         self.args = self.parser.parse_args()
-        self.context = Context(self.args)
+        self.context = CoslovContext(self.args, open(self.args.filename).readlines())
 
     def command(self, name):
         if len(name) < len(self.args.command):
@@ -39,16 +41,14 @@ All commands can be abbreviated with the first letter or letters, for example to
 
 
     def run(self):
-        args = self.args
         context = self.context
         if self.command('check'):
-            lines = open(args.template).readlines()
+            lines = open(context.args.template).readlines()
             template = Block(lines)
-            if args.debug:
+            if context.args.debug:
                 template.show()
             context.debug("###############")
-            state = State(args, open(args.filename).readlines())
-            return template.match(state)
+            return template.match(context)
         else:
             raise SystemExit(
                 "Unknown command '%s', must be any of %s or a beginning of those letters, e.g enc for encrypt\n" %
@@ -63,9 +63,22 @@ def parse_remainder(str):
     return re.sub("^[^:]*:", "", str).strip()
 
 ###########################################################################################
-class Context():
-    def __init__(self, args):
+class CoslovContext():
+    def __init__(self, args, lines):
         self.args = args
+        self.lines = lines
+        self.line_index = 0
+        self.missing_items = []
+        self.extra_lines = []
+
+    def missing(self, item, count):
+        self.verbose("MISSING: "+str(item))
+        self.missing_items.append(item)
+
+    def extra(self, line=None):
+        if line is None:
+            line = str(self.line_index) + ": " + self.line()
+        self.extra_lines.appen(line)
 
     def warning(self, str):
         print(str)
@@ -81,20 +94,15 @@ class Context():
         if self.args.debug:
             print(str)
 
-############################################################
-
-class State(Context):
-    def __init__(self, args, lines, line_index=0):
-        Context.__init__(self, args)
-        self.lines = lines
-        self.line_index = line_index
     def line(self):
         if self.line_index >= len(self.lines):
             return None
         return self.lines[self.line_index].rstrip()
+
     def nextline(self):
         self.line_index += 1
         return self.line()
+
     def prevline(self):
         self.line_index -= 1
         return self.line()
@@ -135,8 +143,8 @@ class Line(Item):
         Item.__init__(self, opt)
         self.line=line.rstrip()
 
-    def match(self, state):
-        return self.line == state.line()
+    def match(self, context):
+        return self.line == context.line()
 
     def __repr__(self):
         return "Line(" + self.line + ")"
@@ -176,8 +184,8 @@ class RegexpLine(Line):
     def __repr__(self):
         return "RegexpLine(" + self.matcher.pattern + ")*"+str(self.max)
 
-    def match(self, state):
-        return self.matcher.match(state.line())
+    def match(self, context):
+        return self.matcher.match(context.line())
 
 ##########################################################################
 
@@ -189,16 +197,16 @@ class YamlVar(Item):
     def __repr__(self):
         return "YamlVar(" +self.var + ")"
 
-    def match(self, state):
-        line = state.line()
+    def match(self, context):
+        line = context.line()
         if line.startswith(self.var+":"):
             if line.endswith('|'):
-                line=state.nextline()
+                line=context.nextline()
                 indent=' ' * (len(line) - len(line.lstrip()))
                 while (line.startswith(indent)):
-                    state.nextline()
-                    line=state.line()
-                state.prevline()
+                    context.nextline()
+                    line=context.line()
+                context.prevline()
             return True
         else:
             return False
@@ -229,36 +237,31 @@ class Block(Item):
         for i in self.items:
             i.show(indent+'    ')
 
-    def count_matches(self, item, state):
-        line = state.line()
+    def count_matches(self, item, context):
+        line = context.line()
         cnt = 0
         while cnt < item.max:
-            if not item.match(state):
+            if not item.match(context):
                 return cnt
-            line=state.nextline()
+            line=context.nextline()
             cnt += 1
         return cnt
 
-    def match(self, parent_state):
-        state = State(
-            parent_state.args,
-            parent_state.lines,
-            line_index = parent_state.line_index,
-        )
+    def match(self, context):
         ok = True
         for item in self.items:
-            state.debug(str(item.max) + '*' + str(item) )
-            cnt=self.count_matches(item, state)
+            context.debug(str(item.max) + '*' + str(item) )
+            cnt=self.count_matches(item, context)
             if cnt < item.min:
-                state.warning("expected min=" + str(item.min) + ": " + str(item))
-                #state.warning(str(state.line_index)+": "+state.line())
-                #state.warning("expecting: " + str(self))
+                context.warning("expected min=" + str(item.min) + ": " + str(item))
+                #context.warning(str(context.line_index)+": "+context.line())
+                #context.warning("expecting: " + str(self))
                 ok = False
-                state.nextline()
+                context.nextline()
             else:
                 prefix = str(cnt)
                 prefix = prefix+' ' * (5-len(prefix))
-                state.verbose(prefix + " match: " + str(item) )
+                context.verbose(prefix + " match: " + str(item) )
         return ok
 
 ############################################################
