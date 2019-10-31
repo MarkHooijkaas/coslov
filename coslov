@@ -175,7 +175,8 @@ standard_regexps = {
     'fqdn': '[a-zA-Z0-9.]*.[a-z][a-z]+',
     'ip': '[0-9]+.[0-9]+.[0-9]+.[0-9]+',
     'any': '.*',
-    'comment': '#.*'
+    'comment': '#.*',
+    'comment-line': '^[ \t]*#.*',
 }
 
 _RE_FIND_REGEXPS=re.compile('@<[^>]*>')
@@ -242,6 +243,7 @@ class Block(Item):
     def __init__(self, lines, index=0):
         Item.__init__(self, '')  # TODO: parse @block
         self.items = []
+        self.ignore_items = []
         line = ''
         while index < len(lines) and not line.startswith('@end'):
             line = lines[index].rstrip()
@@ -251,6 +253,8 @@ class Block(Item):
                 index += len(block.items)+2
             elif line.startswith('@yaml:'):
                 self.items.append(YamlVar(line))
+            elif line.startswith('@ignore:'):
+                self.ignore_items.append(RegexpLine(parse_remainder(line)))
             elif '@<' in line:
                 self.items.append(RegexpLine(line))
             else:
@@ -261,12 +265,23 @@ class Block(Item):
         for i in self.items:
             i.show(indent+'    ')
 
+    def ignore(self, context):
+        for item in self.ignore_items:
+            #print item, context.line()
+            if item.match(context):
+                context.verbose('ignoring:' + context.line())
+                #context.nextline()
+                return True
+        return False
+
+
     def count_matches(self, item, context):
         line = context.line()
         cnt = 0
         while cnt < item.max:
             if not item.match(context):
-                return cnt
+                if not self.ignore(context):
+                    return cnt
             line=context.nextline()
             cnt += 1
         return cnt
