@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from copy import copy
+import argparse
 import os
 import re
 import sys
@@ -12,10 +12,30 @@ def parse_key(str):
 def parse_remainder(str):
     return re.sub("^[^:]*:", "", str).strip()
 
+###########################################################################################
+class Context():
+    def __init__(self, args):
+        self.args = args
+
+    def warning(self, str):
+        print(str)
+
+    def verbose(self, str):
+        if self.args.quiet:
+            return
+        print(str)
+
+    def debug(self, str):
+        if self.args.quiet:
+            return
+        if self.args.debug:
+            print(str)
+
 ############################################################
 
-class State:
-    def __init__(self, lines, line_index=0, item_index=0):
+class State(Context):
+    def __init__(self, args, lines, line_index=0, item_index=0):
+        Context.__init__(self, args)
         self.lines = lines
         self.line_index = line_index
         self.item_index = item_index
@@ -71,8 +91,8 @@ class Line(Item):
             state.nextline()
             return True
         else:
-            print(str(state.line_index)+": "+state.line())
-            print("expecting: " + str(self))
+            state.warning(str(state.line_index)+": "+state.line())
+            state.warning("expecting: " + str(self))
             return False
 
     def _match(self, line):
@@ -142,8 +162,8 @@ class YamlVar(Item):
                 #state.prevline()
             return True
         else:
-            print(str(state.line_index)+": "+state.line())
-            print("expecting: " + str(self))
+            state.warning(str(state.line_index)+": "+state.line())
+            state.warning("expecting: " + str(self))
             return False
 
 ##########################################################################
@@ -177,29 +197,30 @@ class Block(Item):
         line = ''
         if item.match(state):
             #line_index += linecount
-            print("    match: " + state.line())
+            state.verbose("    match: " + state.line())
             state.match_count += 1
             if state.match_count >= item.max:
                 state.item_index += 1  # next template item
                 state.match_count = 0
         elif state.match_count > 0:  # previous line already matched this item, so maybe the next item is in order
-            print "bump!"
+            state.debug("bump!")
             state.match_count = 0
             state.item_index += 1
             self.match_line(state)
         else:  # did not match anything
-            print("unexpected: " + line)
+            state.warning("unexpected: " + line)
             return False
         return True
 
     def match(self, parent_state):
         state = State(
+            parent_state.args,
             parent_state.lines,
             line_index = parent_state.line_index,
             item_index = parent_state.item_index
         )
-        print "Entering "+str(state)
-        while state.line_index < len(lines):
+        state.debug("Entering "+str(state))
+        while state.line_index < len(state.lines):
             #print self.items[state.item_index]
             if not self.match_line(state):
                 return  False
@@ -208,10 +229,56 @@ class Block(Item):
 ############################################################
 
 
+
+#####################################################################################
+class CoslovCli:
+    def __init__(self):
+        epilogtext = '''
+commands:
+- coslov check:   check one or more files according to a template
+
+All commands can be abbreviated with the first letter or letters, for example to check:
+- coslov c
+- coslov ch
+- coslov che
+- coslov chec
+'''
+
+        self.allcommands = "check"
+        self.parser = argparse.ArgumentParser(
+            description='Configfile and Output Stream Line Oriented Validator',
+            epilog=epilogtext,
+            formatter_class=argparse.RawTextHelpFormatter)
+        self.parser.add_argument('-q', '--quiet', action='store_true', help='show no informational output')
+        self.parser.add_argument('-d', '--debug', action='store_true', help='print debug info')
+        self.parser.add_argument('command', help=self.allcommands)
+        self.parser.add_argument('template', nargs='?', default='template.coslov', help='template file')
+        self.parser.add_argument('filename', nargs='?', default=None, help='file to check')
+        self.args = self.parser.parse_args()
+        self.context = Context(self.args)
+
+    def command(self, name):
+        if len(name) < len(self.args.command):
+            return False
+        return name.startswith(self.args.command)
+
+
+    def run(self):
+        args = self.args
+        context = self.context
+        if self.command('check'):
+            lines = open(args.template).readlines()
+            template = Block(lines)
+            #template.show()
+            context.debug("###############")
+            state = State(args, open(args.filename).readlines())
+            template.match(state)
+        else:
+            raise SystemExit(
+                "Unknown command '%s', must be any of %s or a beginning of those letters, e.g enc for encrypt\n" %
+                (self.args.command, self.allcommands)
+            )
+
+
 if __name__ == '__main__':
-    lines = open(sys.argv[1]).readlines()
-    template = Block(lines)
-    #template.show()
-    print "###############"
-    state = State(open(sys.argv[2]).readlines())
-    template.match(state)
+    CoslovCli().run()
