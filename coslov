@@ -1,0 +1,98 @@
+#!/usr/bin/python
+
+import re
+
+############################################################
+def parse_key(str):
+    return re.match("^[^:]*", str).group().strip()
+
+def parse_remainder(str):
+    return re.sub("^[^:]*:", "", str).strip()
+
+############################################################
+
+class Item:
+    def __init__(self, options):
+        if '?' in options:
+            self.min=0
+            self.max=1
+        elif '*' in options:
+            self.min=0
+            self.max=99999
+        elif '+' in options:
+            self.min=1
+            self.max=99999
+        else:
+            self.min=1
+            self.max=1
+
+
+class Line(Item):
+    def __init__(self, line):
+        if line.startswith("@@"):  # special syntax for line that really starts with a @
+            line=line[1:]
+            opt=''
+        elif line.startswith("@"):
+            opt=parse_key(line)[1:]
+            line=parse_remainder(line)
+        else:
+            opt=''
+        Item.__init__(self, opt)
+        self.line=line.rstrip()
+
+    def match(line):
+        return self.line == line
+
+    def __repr__(self):
+        return "Line(" + self.line + ")"
+
+standard_regexps = {
+    'time': '[0-2][0-9]:[0-5][0-9]:[0-5][0-9]',
+    'date': '[0-9][0-9][0-9][0-9]-[0-1][0-9]:[0-3][0-9]',
+    'int': '[1-9][0-9]*',
+    'fqdn': '[a-zA-Z-.]*.[a-z][a-z]+',
+    'comment': '#.*'
+}
+
+_RE_FIND_REGEXPS=re.compile('@<[^>]*>')
+class RegexpLine(Line):
+    def __init__(self, origline):
+        Line.__init__(self, origline)
+        prev = 0
+        result = ''
+        for match in _RE_FIND_REGEXPS.finditer(self.line):
+            fixed = self.line[prev:match.start()]
+            regexp = self.line[match.start():match.end()]
+            prev = match.end()
+            result += re.escape(fixed)
+            if regexp.startswith("@<'") and regexp.endswith("'>"):
+                 result += regexp[3:-2]
+            else:
+                key = regexp[2:-1]
+                result += standard_regexps[key]
+
+        result += self.line[prev:]
+        self.matcher=result
+
+    def __repr__(self):
+        return "RegexpLine(" + self.matcher + ")"
+
+
+class Block(Item):
+    def __init__(self,lines):
+        Item.__init__(self, '')  # TODO: parse @block
+        self.items = []
+        for line in lines:
+            if '@<' in line:
+                self.items.append(RegexpLine(line))
+            else:
+                self.items.append(Line(line))
+
+    def show(self):
+        for i in self.items:
+            print i
+
+
+if __name__ == '__main__':
+    template = Block(open("template"))
+    template.show()
