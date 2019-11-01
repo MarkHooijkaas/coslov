@@ -177,6 +177,7 @@ standard_regexps = {
     'any': '.*',
     'comment': '#.*',
     'comment-line': '^[ \t]*#.*',
+    'empty-line': '^[ \t]*$',
 }
 
 _RE_FIND_REGEXPS=re.compile('@<[^>]*>')
@@ -266,10 +267,12 @@ class Block(Item):
             i.show(indent+'    ')
 
     def ignore(self, context):
+        if context.args.strict:
+            return False
         for item in self.ignore_items:
             #print item, context.line()
             if item.match(context):
-                context.verbose('ignoring:' + context.line())
+                context.info('ignoring:' + str(item))
                 #context.nextline()
                 return True
         return False
