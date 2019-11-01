@@ -9,17 +9,8 @@ import sys
 class CoslovCli:
     def __init__(self):
         epilogtext = '''
-commands:
-- coslov check:   check one or more files according to a template
-
-All commands can be abbreviated with the first letter or letters, for example to check:
-- coslov c
-- coslov ch
-- coslov che
-- coslov chec
 '''
 
-        self.allcommands = "check"
         self.parser = argparse.ArgumentParser(
             description='Configfile and Output Stream Line Oriented Validator',
             epilog=epilogtext,
@@ -29,35 +20,22 @@ All commands can be abbreviated with the first letter or letters, for example to
         self.parser.add_argument('-d', '--debug',  action='store_true', help='print debug info')
         self.parser.add_argument('-s', '--strict', action='store_true', help='ignore the ignores')
         self.parser.add_argument('-p', '--peek',  help='peek PEEK lines ahead')
-        self.parser.add_argument('command', help=self.allcommands)
         self.parser.add_argument('template', nargs='?', default='template.coslov', help='template file')
         self.parser.add_argument('filename', nargs='?', default=None, help='file to check')
         self.args = self.parser.parse_args()
         self.context = CoslovContext(self.args, open(self.args.filename).readlines())
 
-    def command(self, name):
-        if len(name) < len(self.args.command):
-            return False
-        return name.startswith(self.args.command)
-
-
     def run(self):
         context = self.context
-        if self.command('check'):
-            lines = open(context.args.template).readlines()
-            template = Block(lines)
-            if context.args.debug:
-                template.show()
-            context.debug("###############")
-            template.match(context)
-            if len(context.missing_items)>0:
-                print(len(context.missing_items), " missing items")
-                sys.exit(1)
-        else:
-            raise SystemExit(
-                "Unknown command '%s', must be any of %s or a beginning of those letters, e.g enc for encrypt\n" %
-                (self.args.command, self.allcommands)
-            )
+        lines = open(context.args.template).readlines()
+        template = Block(lines)
+        if context.args.debug:
+            template.show()
+        context.debug("###############")
+        template.match(context)
+        if len(context.missing_items)>0:
+            print(len(context.missing_items), " missing items")
+            sys.exit(1)
 
 ############################################################
 def parse_key(str):
