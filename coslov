@@ -38,7 +38,7 @@ class CoslovCli:
             exitcode = 1
             context.info("missing item: "+ str(item))
         for l in context.active_lines():
-            context.info("extra line: "+l.line)
+            context.info("extra line: %5d: %s"% (l.linenr, l.line))
             exitcode = 1
         sys.exit(exitcode)
 
@@ -51,20 +51,19 @@ def parse_remainder(str):
 
 ###########################################################################################
 class LineData():
-    def __init__(self, line):
+    def __init__(self, line, nr):
         self.line = line
         self.match = None
+        self.linenr = nr
 
 
 class CoslovContext():
     def __init__(self, args, lines):
         self.args = args
         self._linedata = []
-        for line in lines:
-            self._linedata.append(LineData(line.rstrip()))
-        self.line_index = 0
+        for index, line in enumerate(lines):
+            self._linedata.append(LineData(line.rstrip(), index))
         self.missing_items = []
-        self.extra_lines = []
 
     def active_lines(self):
         return filter(lambda d: d.match is None, self._linedata)
@@ -74,11 +73,6 @@ class CoslovContext():
         #context.warning(str(context.line_index)+": "+context.line())
         #context.warning("expecting: " + str(self))
         self.missing_items.append(item)
-
-    def extra(self, line):
-        #if line is None:
-        #    line = str(self.line_index) + ": " + self.line()
-        self.extra_lines.appen(line)
 
     def warning(self, str):
         if self.args.quiet:
