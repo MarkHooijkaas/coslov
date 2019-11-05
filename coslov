@@ -33,9 +33,14 @@ class CoslovCli:
             template.show()
         context.debug("###############")
         template.match(context)
-        if len(context.missing_items)>0:
-            print(len(context.missing_items), " missing items")
-            sys.exit(1)
+        exitcode=0
+        for item in context.missing_items:
+            exitcode = 1
+            context.info("missing item: "+ str(item))
+        for l in context.active_lines():
+            context.info("extra line: "+l.line)
+            exitcode = 1
+        sys.exit(exitcode)
 
 ############################################################
 def parse_key(str):
@@ -45,23 +50,34 @@ def parse_remainder(str):
     return re.sub("^[^:]*:", "", str).rstrip()
 
 ###########################################################################################
+class LineData():
+    def __init__(self, line):
+        self.line = line
+        self.match = None
+
+
 class CoslovContext():
     def __init__(self, args, lines):
         self.args = args
-        self.lines = lines
+        self._linedata = []
+        for line in lines:
+            self._linedata.append(LineData(line.rstrip()))
         self.line_index = 0
         self.missing_items = []
         self.extra_lines = []
 
+    def active_lines(self):
+        return filter(lambda d: d.match is None, self._linedata)
+
     def missing(self, item, count):
-        self.warning("expected min=" + str(item.min) + ": " + str(item))
+        #self.warning("expected min=" + str(item.min) + ": " + str(item))
         #context.warning(str(context.line_index)+": "+context.line())
         #context.warning("expecting: " + str(self))
         self.missing_items.append(item)
 
-    def extra(self, line=None):
-        if line is None:
-            line = str(self.line_index) + ": " + self.line()
+    def extra(self, line):
+        #if line is None:
+        #    line = str(self.line_index) + ": " + self.line()
         self.extra_lines.appen(line)
 
     def warning(self, str):
@@ -85,19 +101,6 @@ class CoslovContext():
             return
         if self.args.debug:
             print(str)
-
-    def line(self):
-        if self.line_index >= len(self.lines):
-            return None
-        return self.lines[self.line_index].rstrip()
-
-    def nextline(self):
-        self.line_index += 1
-        return self.line()
-
-    def prevline(self):
-        self.line_index -= 1
-        return self.line()
 
 
 ##########################################################################
@@ -135,8 +138,8 @@ class Line(Item):
         Item.__init__(self, opt)
         self.line=line.rstrip()
 
-    def match(self, context):
-        return self.line == context.line()
+    def match(self, line, data_iterator):
+        return self.line == line
 
     def __str__(self):
         return self.line
@@ -185,8 +188,8 @@ class RegexpLine(Line):
     def __repr__(self):
         return "RegexpLine(" + self.matcher.pattern + ")*"+str(self.max)
 
-    def match(self, context):
-        return self.matcher.match(context.line())
+    def match(self, line, data_iterator):
+        return self.matcher.match(line)
 
 ##########################################################################
 
@@ -201,16 +204,24 @@ class YamlVar(Item):
     def __repr__(self):
         return "YamlVar(" +self.var + ")"
 
-    def match(self, context):
-        line = context.line()
+    def match(self, line, data_iterator):
         if line.startswith(self.var+":"):
+            indent = None
             if line.endswith('|'):
-                line=context.nextline()
-                indent=' ' * (len(line) - len(line.lstrip()))
-                while (line.startswith(indent)):
-                    context.nextline()
-                    line=context.line()
-                context.prevline()
+                done = False
+                while not done:
+                    try:
+                        ldata = data_iterator.next()
+                    except StopIteration:
+                        done = True
+                        break
+                    line = ldata.line
+                    if indent is None:
+                        indent = ' ' * (len(line) - len(line.lstrip()))
+                    if line.startswith(indent):
+                        ldata.match = self
+                    else:
+                        done = True
             return True
         else:
             return False
@@ -246,42 +257,48 @@ class Block(Item):
         for i in self.items:
             i.show(indent+'    ')
 
-    def ignore(self, context):
-        if context.args.strict:
-            return False
+    def ignore(self, line, iterator):
+        #if context.args.strict:
+        #      return False
         for item in self.ignore_items:
             #print item, context.line()
-            if item.match(context):
-                context.info('ignoring:' + str(item))
+            if item.match(line, iterator):
+                #context.info('ignoring:' + str(item))
                 #context.nextline()
                 return True
         return False
-
-
-    def count_matches(self, item, context):
-        line = context.line()
-        cnt = 0
-        while cnt < item.max:
-            if not item.match(context):
-                if not self.ignore(context):
-                    return cnt
-            line=context.nextline()
-            cnt += 1
-        return cnt
 
     def match(self, context):
         ok = True
         for item in self.items:
             context.debug(str(item.max) + '*' + str(item) )
-            cnt=self.count_matches(item, context)
+            cnt=0
+            context.active_lines()
+            iterator = iter(context.active_lines())
+
+            done = False
+            while not done:
+                try:
+                    ldata = iterator.next()
+                except StopIteration:
+                    done = True
+                    break
+                if cnt >= item.max:
+                    break
+                elif item.match(ldata.line, iterator):
+                    cnt += 1
+                    #print cnt, repr(item), ldata.line
+                    ldata.match = item
+                    ldata.count = cnt
+                elif self.ignore(ldata.line, iterator):
+                    pass
             if cnt < item.min:
                 context.missing(item, cnt)
                 ok = False
-                context.nextline()
             else:
                 prefix = str(cnt)
                 prefix = prefix+' ' * (5-len(prefix))
-                context.verbose(prefix + " match: " + str(item) )
+                #context.verbose(prefix + " match: " + str(item) )
         return ok
 
 ############################################################
