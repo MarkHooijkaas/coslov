@@ -36,9 +36,9 @@ class CoslovCli:
         exitcode=0
         for item in context.missing_items:
             exitcode = 1
-            context.info("missing item: "+ str(item))
+            context.info("missing item %4d: %s"  % (item.index, str(item)))
         for l in context.active_lines():
-            context.info("extra line: %5d: %s"% (l.linenr, l.line))
+            context.info("extra line %5d: %s" % (l.linenr, l.line))
             exitcode = 1
         sys.exit(exitcode)
 
@@ -100,7 +100,8 @@ class CoslovContext():
 ##########################################################################
 
 class Item:
-    def __init__(self, options):
+    def __init__(self, index, options):
+        self.index = index
         if '?' in options:
             self.min=0
             self.max=1
@@ -120,7 +121,7 @@ class Item:
 ############################################################
 
 class Line(Item):
-    def __init__(self, line):
+    def __init__(self, index, line):
         if line.startswith("@@"):  # special syntax for line that really starts with a @
             line = line[1:]
             opt = ''
@@ -129,7 +130,7 @@ class Line(Item):
             line = parse_remainder(line)
         else:
             opt = parse_key(line)
-        Item.__init__(self, opt)
+        Item.__init__(self, index, opt)
         self.line=line.rstrip()
 
     def match(self, line, data_iterator):
@@ -157,8 +158,8 @@ standard_regexps = {
 
 _RE_FIND_REGEXPS=re.compile('@<[^>]*>')
 class RegexpLine(Line):
-    def __init__(self, origline):
-        Line.__init__(self, origline)
+    def __init__(self, index, origline):
+        Line.__init__(self, index, origline)
         self.origline=origline
         prev = 0
         result = ''
@@ -188,8 +189,8 @@ class RegexpLine(Line):
 ##########################################################################
 
 class YamlVar(Item):
-    def __init__(self, line):
-        Item.__init__(self, parse_key(line[:5]))
+    def __init__(self, index, line):
+        Item.__init__(self, index, parse_key(line[:5]))
         self.var = parse_remainder(line).strip()
 
     def __str__(self):
@@ -225,7 +226,7 @@ class YamlVar(Item):
 
 class Block(Item):
     def __init__(self, lines, index=0):
-        Item.__init__(self, '')  # TODO: parse @block
+        Item.__init__(self, index, '')  # TODO: parse @block
         self.items = []
         self.ignore_items = []
         line = ''
@@ -238,13 +239,13 @@ class Block(Item):
                 self.items.append(block)
                 index += len(block.items)+2
             elif line.startswith('@yaml:'):
-                self.items.append(YamlVar(line))
+                self.items.append(YamlVar(index, line))
             elif line.startswith('@ignore:'):
-                self.ignore_items.append(RegexpLine(parse_remainder(line)))
+                self.ignore_items.append(RegexpLine(index, parse_remainder(line)))
             elif '@<' in line:
-                self.items.append(RegexpLine(line))
+                self.items.append(RegexpLine(index, line))
             else:
-                self.items.append(Line(line))
+                self.items.append(Line(index, line))
             index += 1
 
     def show(self, indent=''):
