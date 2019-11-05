@@ -42,7 +42,7 @@ def parse_key(str):
     return re.match("^[^:]*", str).group().strip()
 
 def parse_remainder(str):
-    return re.sub("^[^:]*:", "", str).strip()
+    return re.sub("^[^:]*:", "", str).rstrip()
 
 ###########################################################################################
 class CoslovContext():
@@ -226,7 +226,9 @@ class Block(Item):
         line = ''
         while index < len(lines) and not line.startswith('@end'):
             line = lines[index].rstrip()
-            if line.startswith('@block'):
+            if line.startswith('@#'):
+                pass
+            elif line.startswith('@block'):
                 block = Block(lines, index+1)
                 self.items.append(block)
                 index += len(block.items)+2
