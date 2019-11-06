@@ -238,7 +238,7 @@ class Block(Item):
                 block = Block(lines, index+1)
                 self.items.append(block)
                 index += len(block.items)+2
-            elif line.startswith('@yaml:'):
+            elif line.startswith('@yaml'):
                 self.items.append(YamlVar(index, line))
             elif line.startswith('@ignore:'):
                 self.ignore_items.append(RegexpLine(index, parse_remainder(line)))
